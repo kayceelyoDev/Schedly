@@ -1,10 +1,10 @@
 name: Build iOS IPA for AltStore
 on:
-  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-14 # Ensure we have latest Xcode
+    runs-on: macos-14
 
     steps:
       - name: Checkout Code
@@ -13,27 +13,38 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
 
       - name: Install Dependencies
         run: npm install
 
-      - name: Expo Prebuild (Generate iOS Folder)
-        run: npx expo prebuild --platform ios
+      - name: Install CocoaPods
+        run: sudo gem install cocoapods
+
+      - name: Expo Prebuild
+        run: npx expo prebuild --platform ios --clean
+
+      - name: Pod Install
+        run: |
+          cd ios
+          pod install
 
       - name: Build unsigned iOS App
         run: |
           cd ios
-          # Compile the app for physical iPhone (iphoneos) but disable all code signing requirements
-          xcodebuild -workspace schedly.xcworkspace -scheme schedly -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+          # Dynamically find the workspace and scheme so we don't guess the name
+          export WORKSPACE=$(ls | grep "\.xcworkspace$" | head -n 1)
+          export SCHEME=$(xcodebuild -workspace "$WORKSPACE" -list | grep -A 1 "Information about workspace" | tail -n 1 | xargs)
           
+          echo "Building Workspace: $WORKSPACE with Scheme: $SCHEME"
+          
+          xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+
       - name: Package into IPA
         run: |
           cd ios/build/Build/Products/Release-iphoneos
           mkdir Payload
-          # Move the compiled app into the Payload folder
-          mv schedly.app Payload/
-          # Zip it up as an .ipa file
+          mv *.app Payload/
           zip -qr ../../../../../Schedly.ipa Payload/
 
       - name: Upload IPA Artifact
