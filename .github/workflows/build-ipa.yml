@@ -26,9 +26,6 @@ jobs:
           cd ios
           pod install
 
-      - name: Setup Swift 6.2
-        run: sudo xcode-select --switch /Applications/Xcode_16.5.app/Contents/Developer
-
       - name: Build unsigned iOS App
         run: |
           cd ios
