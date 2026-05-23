@@ -30,9 +30,14 @@ jobs:
         run: |
           cd ios
           echo "Building iOS App..."
-          xcodebuild -workspace schedly.xcworkspace -scheme schedly -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+          # Set pipefail so we catch the xcodebuild error but still pipe to tee
+          set -o pipefail
+          
+          # Added DEVELOPMENT_TEAM and ENTITLEMENTS_REQUIRED overrides to prevent strict Xcode 16 signing checks
+          xcodebuild -workspace schedly.xcworkspace -scheme schedly -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" PROVISIONING_PROFILE_SPECIFIER="" ENTITLEMENTS_REQUIRED=NO | tee ../build_log.txt
           
       - name: Package into IPA
+        if: success()
         run: |
           cd ios/build/Build/Products/Release-iphoneos
           mkdir Payload
@@ -40,8 +45,17 @@ jobs:
           zip -qr ../../../../../Schedly.ipa Payload/
 
       - name: Upload IPA Artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Schedly-IPA
           path: Schedly.ipa
+          retention-days: 7
+          
+      - name: Upload Build Log (If Failed)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Crash-Log
+          path: build_log.txt
           retention-days: 7
