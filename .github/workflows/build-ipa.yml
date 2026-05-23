@@ -1,0 +1,44 @@
+name: Build iOS IPA for AltStore
+on:
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+
+jobs:
+  build:
+    runs-on: macos-14 # Ensure we have latest Xcode
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Expo Prebuild (Generate iOS Folder)
+        run: npx expo prebuild --platform ios
+
+      - name: Build unsigned iOS App
+        run: |
+          cd ios
+          # Compile the app for physical iPhone (iphoneos) but disable all code signing requirements
+          xcodebuild -workspace schedly.xcworkspace -scheme schedly -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+          
+      - name: Package into IPA
+        run: |
+          cd ios/build/Build/Products/Release-iphoneos
+          mkdir Payload
+          # Move the compiled app into the Payload folder
+          mv schedly.app Payload/
+          # Zip it up as an .ipa file
+          zip -qr ../../../../../Schedly.ipa Payload/
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Schedly-IPA
+          path: Schedly.ipa
+          retention-days: 7
