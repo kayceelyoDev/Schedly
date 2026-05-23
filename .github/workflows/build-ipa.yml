@@ -21,17 +21,14 @@ jobs:
       - name: Expo Prebuild
         run: npx expo prebuild --platform ios --clean
 
+      - name: Pod Install
+        run: |
+          cd ios
+          pod install
+
       - name: Build unsigned iOS App
         run: |
           cd ios
-          
-          # If the workspace doesn't exist, CocoaPods failed to run during prebuild.
-          if [ ! -d "schedly.xcworkspace" ]; then
-            echo "Workspace not found. Running pod install manually..."
-            bundle install
-            bundle exec pod install
-          fi
-
           echo "Building iOS App..."
           xcodebuild -workspace schedly.xcworkspace -scheme schedly -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
           
@@ -39,7 +36,7 @@ jobs:
         run: |
           cd ios/build/Build/Products/Release-iphoneos
           mkdir Payload
-          mv schedly.app Payload/
+          mv *.app Payload/
           zip -qr ../../../../../Schedly.ipa Payload/
 
       - name: Upload IPA Artifact
