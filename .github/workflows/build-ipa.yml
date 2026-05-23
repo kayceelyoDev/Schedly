@@ -30,10 +30,10 @@ jobs:
         run: |
           cd ios
           echo "Building iOS App..."
-          # Set pipefail so we catch the xcodebuild error but still pipe to tee
+          # Fix React Native 'node' missing in script phase error
+          export NODE_BINARY=$(which node)
           set -o pipefail
           
-          # Added DEVELOPMENT_TEAM and ENTITLEMENTS_REQUIRED overrides to prevent strict Xcode 16 signing checks
           xcodebuild -workspace schedly.xcworkspace -scheme schedly -configuration Release -sdk iphoneos -derivedDataPath build CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" PROVISIONING_PROFILE_SPECIFIER="" ENTITLEMENTS_REQUIRED=NO | tee ../build_log.txt
           
       - name: Package into IPA
@@ -52,10 +52,14 @@ jobs:
           path: Schedly.ipa
           retention-days: 7
           
-      - name: Upload Build Log (If Failed)
+      - name: Extract Errors (If Failed)
+        if: failure()
+        run: grep -A 2 -B 2 -i "error:" build_log.txt > errors_only.txt || echo "Could not parse errors" > errors_only.txt
+
+      - name: Upload Clean Error Log
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: Crash-Log
-          path: build_log.txt
+          name: Clean-Errors
+          path: errors_only.txt
           retention-days: 7
