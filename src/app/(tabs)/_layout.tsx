@@ -16,7 +16,7 @@ export default function TabLayout() {
         headerShown: true,
         header: () => <AppHeader />,
         // Reserve space for floating tab bar
-        contentStyle: {
+        sceneStyle: {
           backgroundColor: theme.BG_COLOR,
           paddingBottom: 130 + insets.bottom,
         },

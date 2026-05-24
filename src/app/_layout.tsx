@@ -6,23 +6,38 @@ import Animated, { FadeOut, BounceInUp, runOnJS, useSharedValue, useAnimatedStyl
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 
 import * as SplashScreen from 'expo-splash-screen';
+import Constants from 'expo-constants';
+
+// Only load notifications outside of Expo Go (it was stripped in SDK 53+)
+const isExpoGo = Constants.appOwnership === 'expo';
 
 
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-let Notifications: any;
-try {
-  Notifications = require('expo-notifications');
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    }),
-  });
-} catch (e) {
-  console.warn("Expo Go does not support expo-notifications on Android SDK 53+. Please use a development build.");
+let Notifications: any = null;
+if (!isExpoGo) {
+  try {
+    Notifications = require('expo-notifications');
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      }),
+    });
+
+    if (require('react-native').Platform.OS === 'android') {
+      Notifications.setNotificationChannelAsync('default', {
+        name: 'default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#FF231F7C',
+      });
+    }
+  } catch (e) {
+    // silently ignore if not available
+  }
 }
 
 import { SettingsProvider, useSettings } from '../context/SettingsContext';
@@ -42,6 +57,9 @@ function RootContent() {
 
   useEffect(() => {
     if (fontsLoaded && ready) {
+      // Hide the static native splash screen to reveal our animated one!
+      SplashScreen.hideAsync().catch(() => {});
+      
       scale.value = withRepeat(
         withSequence(
           withTiming(1.1, { duration: 600 }),
@@ -95,8 +113,6 @@ function RootContent() {
     );
   }
 
-  SplashScreen.hideAsync().catch(() => {});
-
   return (
     <View style={{flex: 1, backgroundColor: theme.BG_COLOR}}>
       <Stack>
@@ -117,7 +133,13 @@ export default function RootLayout() {
         try {
           const { status: existingStatus } = await Notifications.getPermissionsAsync();
           if (existingStatus !== 'granted') {
-            await Notifications.requestPermissionsAsync();
+            const { status } = await Notifications.requestPermissionsAsync({
+              ios: { allowAlert: true, allowSound: true, allowBadge: true },
+              android: { allowsAlarms: true },
+            });
+            if (status !== 'granted') {
+              console.log('Notification permission not granted');
+            }
           }
         } catch (e) {
           console.log('Failed to request notification permissions', e);

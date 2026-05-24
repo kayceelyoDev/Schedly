@@ -19,9 +19,9 @@ import { CheckSquare, Square } from 'lucide-react-native';
 
 interface InsightsData { streak: number; postsThisWeek: number; totalEarnings: number; }
 
-function getInsight(data: InsightsData, theme: ThemeColors) {
+function getInsight(data: InsightsData, theme: ThemeColors, currencySymbol: string) {
   const { streak, postsThisWeek, totalEarnings } = data;
-  if (totalEarnings > 500) return { Icon: DollarSign, iconColor: theme.GREEN, headline: 'Strong earner!', body: `You've pulled in ${totalEarnings.toFixed(0)} in total withdrawals. Your consistency is paying off.` };
+  if (totalEarnings > 500) return { Icon: DollarSign, iconColor: theme.GREEN, headline: 'Strong earner!', body: `You've pulled in ${currencySymbol}${totalEarnings.toFixed(0)} in total withdrawals. Your consistency is paying off.` };
   if (streak >= 7) return { Icon: Flame, iconColor: '#F97316', headline: `${streak}-day streak!`, body: "You've been posting every day this week. Consistency drives the algorithm — keep it up." };
   if (postsThisWeek >= 5) return { Icon: Zap, iconColor: '#FBBF24', headline: 'High volume week', body: `${postsThisWeek} posts this week. You're giving the algorithm a lot to work with.` };
   if (postsThisWeek >= 3) return { Icon: TrendingUp, iconColor: theme.BRAND, headline: 'Building momentum', body: `${postsThisWeek} posts this week. Try to hit one more daily post to push your reach.` };
@@ -31,6 +31,8 @@ function getInsight(data: InsightsData, theme: ThemeColors) {
 
 function InsightsCard({ theme, isDark }: { theme: ThemeColors; isDark: boolean }) {
   const [data, setData] = useState<InsightsData>({ streak: 0, postsThisWeek: 0, totalEarnings: 0 });
+  const { notificationsEnabled, currency } = useSettings();
+  const currencySymbol = currency === 'PHP' ? '₱' : '$';
 
   useFocusEffect(useCallback(() => {
     const load = async () => {
@@ -61,13 +63,60 @@ function InsightsCard({ theme, isDark }: { theme: ThemeColors; isDark: boolean }
         const earningsRows = await db.getAllAsync(`SELECT SUM(amount) as total FROM withdrawals`) as any[];
         const totalEarnings = earningsRows[0]?.total ?? 0;
         setData({ streak, postsThisWeek, totalEarnings });
+
+        // Schedule random engagement analytics notification if enabled
+        // Only attempt in a real build — expo-notifications was stripped from Expo Go in SDK 53
+        const isExpoGo = require('expo-constants').default.appOwnership === 'expo';
+        let Notifications: any = null;
+        if (!isExpoGo) {
+          try { Notifications = require('expo-notifications'); } catch (e) { /* not available */ }
+        }
+
+        if (notificationsEnabled && Notifications) {
+          const lastNotifRows = await db.getAllAsync(`SELECT value FROM settings WHERE key = 'lastAnalyticsNotif'`) as any[];
+          const lastNotifDate = lastNotifRows[0]?.value ? new Date(lastNotifRows[0].value).getTime() : 0;
+          
+          // Only trigger once every 5 days to avoid spam
+          if (Date.now() - lastNotifDate > 5 * 24 * 60 * 60 * 1000) {
+            let title = "Quick Update!";
+            let body = "Schedule your posts today to build your streak and reach on TikTok!";
+            
+            if (totalEarnings > 0 && Math.random() > 0.5) {
+              title = "Earnings Update 💰";
+              body = `You've made ${currencySymbol}${totalEarnings.toFixed(0)} so far! Schedule more posts to keep growing.`;
+            } else if (streak >= 3) {
+              title = "Incredible Streak! 🔥";
+              body = `You are on a ${streak}-day posting streak! Don't lose your momentum today.`;
+            } else if (postsThisWeek >= 2) {
+              title = "Algorithm Boost 🚀";
+              body = `You've posted ${postsThisWeek} times this week! The algorithm loves consistency.`;
+            }
+
+            // Schedule for a random time between 1 and 3 days from now
+            const daysFromNow = Math.floor(Math.random() * 3) + 1;
+            const triggerTime = new Date();
+            triggerTime.setDate(triggerTime.getDate() + daysFromNow);
+            triggerTime.setHours(Math.floor(Math.random() * 8) + 10, 0, 0, 0); // 10 AM to 6 PM
+
+            await Notifications.scheduleNotificationAsync({
+              content: { title, body, sound: true, data: { screen: 'index' } },
+              trigger: {
+                type: Notifications.SchedulableTriggerInputTypes.DATE,
+                date: triggerTime,
+                channelId: 'default',
+              },
+            });
+
+            await db.runAsync(`INSERT OR REPLACE INTO settings (key, value) VALUES ('lastAnalyticsNotif', ?)`, [new Date().toISOString()]);
+          }
+        }
       } catch (e) { console.error(e); }
     };
     load();
-  }, []));
+  }, [notificationsEnabled]));
 
   const iStyles = insightStyles(theme, isDark);
-  const insight = getInsight(data, theme);
+  const insight = getInsight(data, theme, currencySymbol);
   const { Icon, iconColor, headline, body } = insight;
 
   return (
@@ -86,7 +135,7 @@ function InsightsCard({ theme, isDark }: { theme: ThemeColors; isDark: boolean }
         </View>
         <View style={iStyles.statDivider} />
         <View style={iStyles.statChip}>
-          <DollarSign size={14} color={theme.GREEN} />
+          <Text style={{ fontFamily: 'Inter_700Bold', fontSize: 16, color: theme.GREEN, marginBottom: -2 }}>{currencySymbol}</Text>
           <Text style={[iStyles.statValue, { color: theme.GREEN }]}>
             {data.totalEarnings > 0 ? data.totalEarnings.toFixed(0) : '—'}
           </Text>
@@ -128,7 +177,7 @@ const insightStyles = (theme: ThemeColors, isDark: boolean) => StyleSheet.create
 // ─── Main Dashboard Screen ──────────────────────────────────────────────────
 
 export default function DashboardScreen() {
-  const [posts, setPosts] = useState([]);
+  const [posts, setPosts] = useState<any[]>([]);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -155,7 +204,7 @@ export default function DashboardScreen() {
     try {
       const db = await getDB();
       const allRows = await db.getAllAsync(
-        `SELECT * FROM posts WHERE status IN ('Scheduled', 'Posted', 'Analyzed') AND triggerTime LIKE ? ORDER BY CASE status WHEN 'Scheduled' THEN 0 WHEN 'Posted' THEN 1 WHEN 'Analyzed' THEN 2 ELSE 3 END ASC, triggerTime ASC`,
+        `SELECT * FROM posts WHERE status IN ('Scheduled', 'Posted', 'Analyzed') AND triggerTime LIKE ? ORDER BY CASE status WHEN 'Scheduled' THEN 0 WHEN 'Posted' THEN 1 WHEN 'Analyzed' THEN 2 ELSE 3 END ASC, triggerTime DESC`,
         [`${dateStr}%`]
       );
       setPosts(allRows);
@@ -437,7 +486,6 @@ export default function DashboardScreen() {
     >
       <ScrollView
         showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[0]}
         contentContainerStyle={{ paddingBottom: 150 }}
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={theme.BRAND} />}
         keyboardShouldPersistTaps="handled"
@@ -446,18 +494,22 @@ export default function DashboardScreen() {
         <View style={styles.calendarSection}>
           <Animated.View entering={FadeInDown.delay(50).springify()} style={styles.calendarWrapper}>
             <Calendar
-              key={theme.BRAND}
+              key={`${theme.BRAND}-${isDark}`}
               current={selectedDate}
               onDayPress={(day: any) => setSelectedDate(day.dateString)}
               theme={{
                 backgroundColor: 'transparent', calendarBackground: 'transparent',
-                textSectionTitleColor: theme.TEXT_MUTED,
-                dayTextColor: theme.TEXT_DARK,
+                textSectionTitleColor: isDark ? '#8A8A9A' : '#8A8FA8',
+                dayTextColor: isDark ? '#F0F0F4' : '#18181B',
                 textDisabledColor: isDark ? '#3A3A4A' : '#C8C8C0',
-                monthTextColor: theme.TEXT_DARK, arrowColor: theme.TEXT_DARK,
-                selectedDayBackgroundColor: theme.BRAND, selectedDayTextColor: '#FFFFFF',
-                todayTextColor: theme.BRAND, todayBackgroundColor: theme.BRAND + '22',
-                textDayFontFamily: 'Inter_500Medium', textMonthFontFamily: 'Inter_700Bold',
+                monthTextColor: isDark ? '#F0F0F4' : '#18181B',
+                arrowColor: isDark ? '#F0F0F4' : '#18181B',
+                selectedDayBackgroundColor: theme.BRAND,
+                selectedDayTextColor: '#FFFFFF',
+                todayTextColor: theme.BRAND,
+                todayBackgroundColor: theme.BRAND + '22',
+                textDayFontFamily: 'Inter_500Medium',
+                textMonthFontFamily: 'Inter_700Bold',
                 textDayHeaderFontFamily: 'Inter_600SemiBold',
                 textDayFontSize: 14, textMonthFontSize: 16, textDayHeaderFontSize: 12,
               }}
@@ -637,15 +689,15 @@ export default function DashboardScreen() {
 
 const createStyles = (theme: ThemeColors, isDark: boolean) => StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.BG_COLOR },
-  calendarSection: { backgroundColor: theme.BG_COLOR, paddingTop: 8 },
+  calendarSection: { backgroundColor: theme.BG_COLOR, paddingTop: 16 },
   calendarWrapper: {
-    backgroundColor: theme.CARD_BG, borderRadius: 28, marginHorizontal: 16, marginBottom: 10,
-    paddingVertical: 4, paddingHorizontal: 4,
+    backgroundColor: theme.CARD_BG, borderRadius: 28, marginHorizontal: 16, marginBottom: 20,
+    paddingVertical: 12, paddingHorizontal: 12,
     shadowColor: isDark ? '#000' : '#18181B', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: isDark ? 0.4 : 0.06, shadowRadius: 20, elevation: 4,
     borderWidth: 1, borderColor: theme.BORDER,
   },
-  listSection: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 20 },
+  listSection: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 20 },
   listHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
   listTitle: { fontFamily: 'Inter_700Bold', fontSize: 20, color: theme.TEXT_DARK },
   countBadge: { backgroundColor: theme.BRAND + '22', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3 },

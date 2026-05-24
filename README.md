@@ -1,56 +1,59 @@
-# Welcome to your Expo app 👋
+# Schedly 📅
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Schedly is a beautifully designed, local-first React Native application tailored for affiliate marketers and content creators. It helps you schedule posts, manage captions, and track your revenue performance seamlessly. 
 
-## Get started
+Built with **Expo**, **Expo Router**, and **SQLite**, Schedly ensures all your data stays private and fast on your local device.
 
-1. Install dependencies
+## 🌟 Features
 
-   ```bash
-   npm install
-   ```
+*   **Task & Post Scheduling:** Schedule tasks and affiliate posts with local push notifications. Never miss a peak posting time again.
+*   **Performance Analytics:** 
+    *   Track total revenue and projected earnings (Daily, Weekly, Monthly, Yearly).
+    *   View interactive revenue and view trends via line charts.
+    *   Discover your "Sweet Spot" — the app analyzes your post views to tell you what time of day gets the highest engagement.
+*   **Caption Vault:** Save, organize, and copy your most-used captions and affiliate links for quick access.
+*   **Deep Customization:**
+    *   **Theming:** Full Light and Dark mode support with sleek, modern UI.
+    *   **Accent Colors:** Personalize the app with custom brand colors (Orange, Blue, Green, etc.).
+    *   **Localization:** Toggle between 12-hour/24-hour time formats and change your preferred currency symbol (e.g., $, ₱, €).
+*   **100% Offline:** All data is stored locally using `expo-sqlite` for maximum privacy and offline availability.
 
-2. Start the app
+## 📸 Tech Stack
 
-   ```bash
-   npx expo start
-   ```
+*   **Framework:** React Native + Expo (SDK 51+)
+*   **Routing:** Expo Router
+*   **Storage:** `expo-sqlite`
+*   **Notifications:** `expo-notifications` (Fully supports Android 13+ Alarms)
+*   **Icons & UI:** `lucide-react-native`, `react-native-reanimated`, `react-native-gifted-charts`
 
-In the output, you'll find options to open the app in a
+## 🚀 Getting Started
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+### Prerequisites
+Make sure you have Node.js installed, and if you want to build locally, the Android SDK or iOS toolchain.
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
+### 1. Install Dependencies
 ```bash
-npm run reset-project
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### 2. Run the App
+To start the Expo development server:
+```bash
+npx expo start
+```
+You can run it on an Android Emulator, iOS Simulator, or via the Expo Go app. 
+*(Note: Push notifications are not supported inside the Expo Go app on SDK 53+. To test notifications, you must use a development build or APK).*
 
-### Other setup steps
+## 📦 Building for Production
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+Since Schedly relies on native background notifications, the best way to use it is by compiling a standalone APK or AAB.
 
-## Learn more
+**Using EAS Build (Cloud):**
+```bash
+npm install -g eas-cli
+eas build -p android --profile preview
+```
+Once the build is finished, EAS will provide a link to download your `.apk` file which you can install on your physical device or emulator.
 
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## 📄 License
+This project is licensed under the MIT License.

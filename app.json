@@ -20,7 +20,14 @@
         "foregroundImage": "./assets/images/logo-only-with-out-bg.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.kayceelyo.schedly"
+      "package": "com.kayceelyo.schedly",
+      "permissions": [
+        "android.permission.SCHEDULE_EXACT_ALARM",
+        "android.permission.USE_EXACT_ALARM",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.VIBRATE",
+        "android.permission.RECEIVE_BOOT_COMPLETED"
+      ]
     },
     "web": {
       "output": "static",
@@ -40,7 +47,9 @@
       ],
       "expo-sqlite",
       "@react-native-community/datetimepicker",
-      "expo-font"
+      "expo-font",
+      "expo-notifications",
+      "expo-image"
     ],
     "experiments": {
       "typedRoutes": true,

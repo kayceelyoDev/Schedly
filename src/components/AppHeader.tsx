@@ -50,12 +50,16 @@ export default function AppHeader() {
           <TouchableOpacity
             style={[
               styles.settingsBtn,
-              { backgroundColor: isDark ? '#2A2A35' : '#EBEBEA' },
+              {
+                backgroundColor: isDark ? '#2A2A35' : '#E8E8E2',
+                borderWidth: 1,
+                borderColor: isDark ? '#3A3A45' : '#D8D8D2',
+              },
             ]}
             onPress={() => router.push('/settings')}
             activeOpacity={0.75}
           >
-            <Settings size={18} color={theme.TEXT_MUTED} strokeWidth={1.8} />
+            <Settings size={18} color={isDark ? '#8A8A9A' : '#6A6A7A'} strokeWidth={1.8} />
           </TouchableOpacity>
         )}
       </View>

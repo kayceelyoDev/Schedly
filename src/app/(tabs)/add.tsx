@@ -7,12 +7,13 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { Type, ShoppingBag, CalendarClock, Hash, CalendarDays, Clock } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSettings, ThemeColors } from '../../context/SettingsContext';
+import Constants from 'expo-constants';
 
-let Notifications: any;
-try {
-  Notifications = require('expo-notifications');
-} catch (e) {
-  console.warn("Expo Go does not support expo-notifications on Android SDK 53+. Please use a development build.");
+// Never load expo-notifications inside Expo Go — it was stripped in SDK 53+
+const isExpoGo = Constants.appOwnership === 'expo';
+let Notifications: any = null;
+if (!isExpoGo) {
+  try { Notifications = require('expo-notifications'); } catch (e) { /* not available */ }
 }
 
 export default function AddPostScreen() {
@@ -64,18 +65,47 @@ export default function AddPostScreen() {
         [title, date.toISOString(), caption, productName, postHour]
       );
 
-      const triggerTime = new Date(date.getTime() - 15 * 60000);
-      if (notificationsEnabled && Notifications && triggerTime > new Date()) {
+      // PRODUCTION: Schedule 15-min warning + deadline notification
+      if (notificationsEnabled && Notifications) {
         try {
-          await Notifications.scheduleNotificationAsync({
-            content: {
-              title: "Time to post!",
-              body: `Your TikTok task "${title}" is due in 15 minutes!`,
-            },
-            trigger: triggerTime,
-          });
+          const now = new Date();
+          const fifteenMinsBefore = new Date(date.getTime() - 15 * 60000);
+
+          // 15-minute warning — only if deadline is more than 15 mins away
+          if (fifteenMinsBefore > now) {
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title: `⏰ Upcoming: ${title}`,
+                body: `Due in 15 minutes!${productName ? ` Product: ${productName}` : ''}`,
+                sound: true,
+                data: { screen: 'index', taskTitle: title },
+              },
+              trigger: {
+                type: Notifications.SchedulableTriggerInputTypes.DATE,
+                date: fifteenMinsBefore,
+                channelId: 'default',
+              },
+            });
+          }
+
+          // Exact deadline notification
+          if (date > now) {
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title: `🚀 Time to Post: ${title}`,
+                body: `Post right now!${productName ? ` Product: ${productName}.` : ''}${caption ? ` Check your caption.` : ''}`,
+                sound: true,
+                data: { screen: 'index', taskTitle: title },
+              },
+              trigger: {
+                type: Notifications.SchedulableTriggerInputTypes.DATE,
+                date: date,
+                channelId: 'default',
+              },
+            });
+          }
         } catch (e) {
-          console.log('Push notifications unavailable');
+          console.log('Failed to schedule notification:', e);
         }
       }
 

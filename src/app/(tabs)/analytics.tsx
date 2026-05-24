@@ -4,7 +4,7 @@ import { getDB } from '../../db/database';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { useFocusEffect } from 'expo-router';
 import { LineChart } from 'react-native-gifted-charts';
-import { Flame, Activity, Clock, DollarSign, PlusCircle, X, Trash2, CalendarDays, TrendingUp, BarChart2, ShoppingBag, CheckSquare, Square } from 'lucide-react-native';
+import { Flame, Activity, Clock, DollarSign, PlusCircle, X, Trash2, CalendarDays, TrendingUp, BarChart2, ShoppingBag, CheckSquare, Square, Sun, Calendar, CalendarRange, Award, BarChart3, Banknote, Zap } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useSettings, ThemeColors } from '../../context/SettingsContext';
 
@@ -423,11 +423,14 @@ export default function AnalyticsScreen() {
               <Text style={styles.title}>Your Sweet Spot</Text>
             </View>
             {bestHour !== null ? (
-              <View>
-                <Text style={styles.mainStat}>{formatHour(bestHour)}</Text>
-                <View style={[styles.subStatRow, { backgroundColor: '#F973161A' }]}>
+              <View style={styles.sweetSpotContent}>
+                <View style={styles.timeBadge}>
+                  <Clock size={20} color="#F97316" />
+                  <Text style={styles.timeBadgeText}>{formatHour(bestHour)}</Text>
+                </View>
+                <View style={[styles.subStatRow, { backgroundColor: '#F973161A', marginTop: 16 }]}>
                   <Activity color="#F97316" size={14} />
-                  <Text style={[styles.subStat, { color: '#F97316' }]}>Peak performance ({avgViews} avg views)</Text>
+                  <Text style={[styles.subStat, { color: '#F97316' }]}>Peak performance · {avgViews} avg views</Text>
                 </View>
               </View>
             ) : (
@@ -467,38 +470,46 @@ export default function AnalyticsScreen() {
         </Animated.View>
       ) : (
         <Animated.View entering={FadeIn.duration(400)} key="earnings">
-          
-          <View style={styles.headerFlex}>
-            <TouchableOpacity style={styles.addBtn} onPress={() => setShowModal(true)}>
-              <PlusCircle color="#fff" size={16} />
-              <Text style={styles.addBtnText}>Log Withdrawal</Text>
-            </TouchableOpacity>
-          </View>
 
-          {/* Total Earnings */}
-          <Animated.View entering={FadeInDown.duration(600)} style={styles.card}>
-            <View style={styles.headerRow}>
-              <DollarSign color={theme.BRAND} size={24} />
-              <Text style={styles.title}>Revenue Overview</Text>
+          {/* Hero Revenue Card */}
+          <Animated.View entering={FadeInDown.duration(600)} style={styles.heroCard}>
+            <View style={styles.heroCardHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.heroLabel}>TOTAL REVENUE</Text>
+                <View style={styles.heroStatRow}>
+                  <Text style={styles.heroStatSymbol}>{currSymbol}</Text>
+                  <Text style={styles.heroStat}>{totalRevenue.toFixed(2)}</Text>
+                </View>
+              </View>
+              <TouchableOpacity style={styles.fabBtn} onPress={() => setShowModal(true)} activeOpacity={0.85}>
+                <PlusCircle color="#fff" size={18} />
+                <Text style={styles.fabBtnText}>Log</Text>
+              </TouchableOpacity>
             </View>
-            <Text style={styles.mainStat}>{currSymbol}{totalRevenue.toFixed(2)}</Text>
 
             {Object.keys(averages).length > 0 && (
-              <View style={styles.averagesGrid}>
-                {[
-                  { label: 'Per Day', value: averages.day },
-                  { label: 'Per Week', value: averages.week },
-                  { label: 'Half Month', value: averages.halfMonth },
-                  { label: 'Per Month', value: averages.month },
-                  { label: 'Quarterly', value: averages.quarter },
-                  { label: 'Yearly', value: averages.year },
-                ].map((item) => (
-                  <View key={item.label} style={styles.avgBox}>
-                    <Text style={styles.avgLabel}>{item.label}</Text>
-                    <Text style={[styles.avgValue, { color: theme.BRAND }]}>{currSymbol}{item.value.toFixed(2)}</Text>
-                  </View>
-                ))}
-              </View>
+              <>
+                <View style={styles.heroDivider} />
+                <Text style={styles.projectionLabel}>PROJECTED EARNINGS</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.avgScroll}>
+                  {([
+                    { label: 'Daily',     value: averages.day,       Icon: Sun },
+                    { label: 'Weekly',    value: averages.week,      Icon: CalendarDays },
+                    { label: '2 Weeks',   value: averages.halfMonth,  Icon: CalendarRange },
+                    { label: 'Monthly',   value: averages.month,     Icon: Calendar },
+                    { label: 'Quarterly', value: averages.quarter,   Icon: BarChart3 },
+                    { label: 'Yearly',    value: averages.year,      Icon: Award },
+                  ] as { label: string; value: number; Icon: any }[]).map((item) => (
+                    <View key={item.label} style={styles.avgChip}>
+                      <View style={styles.avgChipIconWrap}>
+                        <item.Icon size={14} color={theme.BRAND} />
+                      </View>
+                      <Text style={styles.avgChipValue}>{currSymbol}{item.value >= 1000 ? (item.value / 1000).toFixed(1) + 'k' : item.value.toFixed(0)}</Text>
+                      <Text style={styles.avgChipLabel}>{item.label}</Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              </>
             )}
           </Animated.View>
 
@@ -618,8 +629,8 @@ export default function AnalyticsScreen() {
                       </View>
                     )}
                     <View style={styles.withdrawalLeft}>
-                      <View style={[styles.productIconWrap, { backgroundColor: theme.BRAND + '1A' }]}>
-                        <DollarSign size={16} color={theme.BRAND} />
+                      <View style={[styles.withdrawalIconWrap, { backgroundColor: theme.BRAND + '18' }]}>
+                        <Banknote size={18} color={theme.BRAND} />
                       </View>
                       <View>
                         <Text style={styles.withdrawalAmount}>{currSymbol}{w.amount.toFixed(2)}</Text>
@@ -719,7 +730,56 @@ const createStyles = (theme: ThemeColors, isDark: boolean) => StyleSheet.create(
   timeframeBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
   timeframeBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 11, color: theme.TEXT_MUTED },
   title: { fontSize: 18, fontFamily: 'Inter_700Bold', color: theme.TEXT_DARK },
+  // Hero card
+  heroCard: {
+    backgroundColor: theme.CARD_BG, borderRadius: 28, padding: 24,
+    shadowColor: isDark ? '#000' : '#18181B', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: isDark ? 0.4 : 0.08, shadowRadius: 20, elevation: 6,
+    marginBottom: 20, borderWidth: 1, borderColor: theme.BORDER,
+  },
+  heroCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  heroLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 11, color: theme.TEXT_MUTED, marginBottom: 10, letterSpacing: 1.2 },
+  heroStatRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 2 },
+  heroStatSymbol: { fontFamily: 'Inter_700Bold', fontSize: 22, color: theme.BRAND, marginBottom: 6 },
+  heroStat: { fontFamily: 'Inter_700Bold', fontSize: 48, color: isDark ? '#F0F0F4' : '#18181B', letterSpacing: -2, lineHeight: 54 },
   mainStat: { fontSize: 34, fontFamily: 'Inter_700Bold', color: theme.TEXT_DARK, marginBottom: 12, letterSpacing: -1 },
+  sweetSpotContent: { alignItems: 'flex-start' },
+  timeBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: '#F973161A', borderWidth: 1, borderColor: '#F9731630',
+    paddingHorizontal: 20, paddingVertical: 14, borderRadius: 20,
+  },
+  timeBadgeText: {
+    fontFamily: 'Inter_700Bold', fontSize: 28, color: '#F97316', letterSpacing: -1,
+  },
+  heroDivider: { height: 1, backgroundColor: theme.BORDER, marginVertical: 20 },
+  projectionLabel: { fontFamily: 'Inter_600SemiBold', fontSize: 11, color: theme.TEXT_MUTED, letterSpacing: 1, marginBottom: 14 },
+  fabBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: theme.BRAND, paddingHorizontal: 16, paddingVertical: 10,
+    borderRadius: 20, shadowColor: theme.BRAND, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4, shadowRadius: 8, elevation: 5,
+  },
+  fabBtnText: { fontFamily: 'Inter_700Bold', color: '#fff', fontSize: 14 },
+  avgScroll: { gap: 10, paddingRight: 4 },
+  avgChip: {
+    backgroundColor: theme.BG_COLOR, borderRadius: 18, paddingVertical: 14,
+    paddingHorizontal: 16, alignItems: 'center', borderWidth: 1, borderColor: theme.BORDER, minWidth: 80,
+  },
+  avgChipIconWrap: {
+    width: 28, height: 28, borderRadius: 8, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: theme.BRAND + '18', marginBottom: 6,
+  },
+  avgChipValue: { fontFamily: 'Inter_700Bold', fontSize: 15, color: theme.BRAND, marginBottom: 3 },
+  avgChipLabel: { fontFamily: 'Inter_500Medium', fontSize: 10, color: theme.TEXT_MUTED },
+  withdrawalIconWrap: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  // kept for backwards compat
+  headerFlex: { marginBottom: 16 },
+  addBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: theme.BRAND,
+    paddingVertical: 14, borderRadius: 20, gap: 8, width: '100%',
+  },
+  addBtnText: { fontFamily: 'Inter_700Bold', color: '#fff', fontSize: 15 },
   averagesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderColor: theme.BORDER },
   avgBox: {
     width: '30%', backgroundColor: theme.BG_COLOR, padding: 12,
