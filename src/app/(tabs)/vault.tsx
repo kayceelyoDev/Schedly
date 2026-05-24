@@ -1,19 +1,25 @@
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Modal, Alert } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Modal, Alert, KeyboardAvoidingView, Platform, ActivityIndicator, RefreshControl } from 'react-native';
 import { useState, useCallback } from 'react';
 import { getDB } from '../../db/database';
-import { ShoppingBag, Hash, Save, Trash2, Pencil, X, PlusCircle } from 'lucide-react-native';
+import { ShoppingBag, Hash, Save, Trash2, Pencil, X, PlusCircle, CheckSquare, Square } from 'lucide-react-native';
 import Animated, { FadeInDown, FadeInUp, Layout, Easing } from 'react-native-reanimated';
 import { useFocusEffect } from 'expo-router';
 import { useSettings, ThemeColors } from '../../context/SettingsContext';
 
 export default function VaultScreen() {
   const [vaultItems, setVaultItems] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Add/Edit modal state
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null); // null = new, else = editing
   const [productName, setProductName] = useState('');
   const [hashtags, setHashtags] = useState('');
+
+  // Selection state
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const { theme } = useSettings();
   const styles = createStyles(theme);
@@ -25,7 +31,15 @@ export default function VaultScreen() {
       setVaultItems(items);
     } catch (e) {
       console.error(e);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
     }
+  };
+
+  const onRefresh = () => {
+    setIsRefreshing(true);
+    fetchVault();
   };
 
   useFocusEffect(useCallback(() => { fetchVault(); }, []));
@@ -93,20 +107,103 @@ export default function VaultScreen() {
     );
   };
 
+  const handleLongPress = (id: number) => {
+    if (!isSelectionMode) {
+      setIsSelectionMode(true);
+      setSelectedIds(new Set([id]));
+    }
+  };
+
+  const handlePressCard = (id: number) => {
+    if (isSelectionMode) {
+      const next = new Set(selectedIds);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      setSelectedIds(next);
+      if (next.size === 0) setIsSelectionMode(false);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === vaultItems.length) {
+      setSelectedIds(new Set());
+      setIsSelectionMode(false);
+    } else {
+      setSelectedIds(new Set(vaultItems.map((item: any) => item.id)));
+    }
+  };
+
+  const handleBatchDelete = () => {
+    if (selectedIds.size === 0) return;
+    Alert.alert(
+      'Delete Entries',
+      `Delete ${selectedIds.size} vault entr${selectedIds.size === 1 ? 'y' : 'ies'}? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive',
+          onPress: async () => {
+            try {
+              const db = await getDB();
+              const ids = Array.from(selectedIds).join(',');
+              await db.runAsync(`DELETE FROM vault WHERE id IN (${ids})`);
+              setIsSelectionMode(false);
+              setSelectedIds(new Set());
+              fetchVault();
+            } catch (e) { console.error(e); }
+          }
+        }
+      ]
+    );
+  };
+
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.pageHeader}>
-        <Text style={styles.pageTitle}>Hashtag Vault</Text>
-        <TouchableOpacity style={styles.addBtn} onPress={openAddModal} activeOpacity={0.8}>
-          <PlusCircle color="#fff" size={18} />
-          <Text style={styles.addBtnText}>Add Entry</Text>
-        </TouchableOpacity>
+        {isSelectionMode ? (
+          <>
+            <TouchableOpacity onPress={toggleSelectAll} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              {selectedIds.size === vaultItems.length && vaultItems.length > 0 ? (
+                <CheckSquare color={theme.BRAND} size={20} />
+              ) : (
+                <Square color={theme.TEXT_MUTED} size={20} />
+              )}
+              <Text style={styles.pageTitle}>Select All</Text>
+            </TouchableOpacity>
+            <View style={{ flex: 1 }} />
+            <TouchableOpacity onPress={() => setIsSelectionMode(false)} style={styles.cancelBtn}>
+              <Text style={styles.cancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+            {selectedIds.size > 0 && (
+              <TouchableOpacity onPress={handleBatchDelete} style={styles.batchDeleteBtn}>
+                <Trash2 color="#fff" size={14} />
+                <Text style={styles.batchDeleteBtnText}>Delete</Text>
+              </TouchableOpacity>
+            )}
+          </>
+        ) : (
+          <>
+            <Text style={styles.pageTitle}>Caption Vault</Text>
+            <TouchableOpacity style={styles.addBtn} onPress={openAddModal} activeOpacity={0.8}>
+              <PlusCircle color="#fff" size={18} />
+              <Text style={styles.addBtnText}>Add Entry</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
       {/* List */}
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.list}>
-        {vaultItems.length === 0 ? (
+      <ScrollView 
+        showsVerticalScrollIndicator={false} 
+        contentContainerStyle={styles.list}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={theme.BRAND} />}
+      >
+        {isLoading ? (
+          <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+            <ActivityIndicator size="large" color={theme.BRAND} />
+          </View>
+        ) : vaultItems.length === 0 ? (
           <Animated.View entering={FadeInUp} style={styles.emptyContainer}>
             <Hash size={48} color={theme.BORDER} />
             <Text style={styles.emptyTitle}>Vault is empty</Text>
@@ -120,8 +217,24 @@ export default function VaultScreen() {
               layout={Layout.springify().damping(14)}
               style={styles.card}
             >
-              {/* Left accent */}
-              <View style={[styles.cardAccent, { backgroundColor: theme.BRAND }]} />
+              <TouchableOpacity
+                activeOpacity={isSelectionMode ? 0.8 : 1}
+                onLongPress={() => handleLongPress(item.id)}
+                onPress={() => handlePressCard(item.id)}
+                style={{ flex: 1, flexDirection: 'row' }}
+              >
+                {isSelectionMode && (
+                  <View style={{ justifyContent: 'center', paddingLeft: 16 }}>
+                    {selectedIds.has(item.id) ? (
+                      <CheckSquare color={theme.BRAND} size={20} />
+                    ) : (
+                      <Square color={theme.TEXT_MUTED} size={20} />
+                    )}
+                  </View>
+                )}
+                {/* Left accent */}
+                <View style={[styles.cardAccent, { backgroundColor: theme.BRAND, marginLeft: isSelectionMode ? 10 : 12 }]} />
+
 
               <View style={styles.cardInner}>
                 <View style={styles.cardHeader}>
@@ -148,6 +261,7 @@ export default function VaultScreen() {
                 </View>
                 <Text style={styles.hashtagsText}>{item.hashtags}</Text>
               </View>
+              </TouchableOpacity>
             </Animated.View>
           ))
         )}
@@ -155,7 +269,10 @@ export default function VaultScreen() {
 
       {/* Add / Edit Modal */}
       <Modal visible={showModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView 
+          style={styles.modalOverlay}
+          behavior="padding"
+        >
           <View style={styles.modalContent}>
             <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
@@ -165,43 +282,45 @@ export default function VaultScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Product Name */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Product Name</Text>
-              <View style={styles.inputWrapper}>
-                <ShoppingBag color={theme.TEXT_MUTED} size={16} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. Wireless Mouse"
-                  placeholderTextColor={theme.TEXT_MUTED}
-                  value={productName}
-                  onChangeText={setProductName}
-                />
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 50 }}>
+              {/* Product Name */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Product Name</Text>
+                <View style={styles.inputWrapper}>
+                  <ShoppingBag color={theme.TEXT_MUTED} size={16} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g. Wireless Mouse"
+                    placeholderTextColor={theme.TEXT_MUTED}
+                    value={productName}
+                    onChangeText={setProductName}
+                  />
+                </View>
               </View>
-            </View>
 
-            {/* Hashtags */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Hashtags</Text>
-              <View style={[styles.inputWrapper, styles.textAreaWrapper]}>
-                <Hash color={theme.TEXT_MUTED} size={16} style={{ marginTop: 4 }} />
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  placeholder="#TikTokMadeMeBuyIt #Tech"
-                  placeholderTextColor={theme.TEXT_MUTED}
-                  value={hashtags}
-                  onChangeText={setHashtags}
-                  multiline
-                />
+              {/* Caption */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Caption</Text>
+                <View style={[styles.inputWrapper, styles.textAreaWrapper]}>
+                  <Hash color={theme.TEXT_MUTED} size={16} style={{ marginTop: 4 }} />
+                  <TextInput
+                    style={[styles.input, styles.textArea]}
+                    placeholder="#TikTokMadeMeBuyIt #Tech"
+                    placeholderTextColor={theme.TEXT_MUTED}
+                    value={hashtags}
+                    onChangeText={setHashtags}
+                    multiline
+                  />
+                </View>
               </View>
-            </View>
 
-            <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.8}>
-              <Save color="#fff" size={18} />
-              <Text style={styles.saveBtnText}>{editingItem ? 'Update' : 'Save Hashtags'}</Text>
-            </TouchableOpacity>
+              <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.8}>
+                <Save color="#fff" size={18} />
+                <Text style={styles.saveBtnText}>{editingItem ? 'Update' : 'Save Caption'}</Text>
+              </TouchableOpacity>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -219,6 +338,10 @@ const createStyles = (theme: ThemeColors) => StyleSheet.create({
     backgroundColor: theme.BRAND, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 20,
   },
   addBtnText: { fontFamily: 'Inter_700Bold', color: '#fff', fontSize: 13 },
+  cancelBtn: { paddingHorizontal: 12, paddingVertical: 6 },
+  cancelBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: theme.TEXT_MUTED },
+  batchDeleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.RED, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  batchDeleteBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: '#fff' },
   list: { paddingHorizontal: 16, paddingBottom: 150 },
   // Cards
   card: {

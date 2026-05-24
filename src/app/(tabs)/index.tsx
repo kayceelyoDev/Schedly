@@ -1,7 +1,7 @@
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Modal, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Modal, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { useCallback, useState } from 'react';
 import { getDB } from '../../db/database';
-import Animated, { FadeInDown, FadeInUp, Layout } from 'react-native-reanimated';
+import Animated, { FadeInDown, FadeInUp, Layout, FadeIn } from 'react-native-reanimated';
 import * as Clipboard from 'expo-clipboard';
 import * as Linking from 'expo-linking';
 import { useFocusEffect } from 'expo-router';
@@ -13,6 +13,7 @@ import {
 import { Calendar } from 'react-native-calendars';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useSettings, ThemeColors } from '../../context/SettingsContext';
+import { CheckSquare, Square } from 'lucide-react-native';
 
 // ─── Smart Insights Card ────────────────────────────────────────────────────
 
@@ -129,7 +130,14 @@ const insightStyles = (theme: ThemeColors, isDark: boolean) => StyleSheet.create
 export default function DashboardScreen() {
   const [posts, setPosts] = useState([]);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [viewCounts, setViewCounts] = useState<{ [key: number]: string }>({});
+  const [calendarMarks, setCalendarMarks] = useState<any>({});
+
+  // Selection mode
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   // Edit modal
   const [editingPost, setEditingPost] = useState<any>(null);
@@ -147,14 +155,44 @@ export default function DashboardScreen() {
     try {
       const db = await getDB();
       const allRows = await db.getAllAsync(
-        `SELECT * FROM posts WHERE status IN ('Scheduled', 'Posted') AND triggerTime LIKE ? ORDER BY triggerTime ASC`,
+        `SELECT * FROM posts WHERE status IN ('Scheduled', 'Posted', 'Analyzed') AND triggerTime LIKE ? ORDER BY CASE status WHEN 'Scheduled' THEN 0 WHEN 'Posted' THEN 1 WHEN 'Analyzed' THEN 2 ELSE 3 END ASC, triggerTime ASC`,
         [`${dateStr}%`]
       );
       setPosts(allRows);
-    } catch (e) { console.error(e); }
+
+      // Fetch all tasks to mark the calendar
+      const allTasks = await db.getAllAsync(
+        `SELECT triggerTime, status FROM posts WHERE status IN ('Scheduled', 'Posted', 'Analyzed')`
+      ) as any[];
+      
+      const marks: any = {};
+      allTasks.forEach((task: any) => {
+        const dStr = task.triggerTime.split('T')[0];
+        if (!marks[dStr]) marks[dStr] = { hasScheduled: false, hasCompleted: false };
+        if (task.status === 'Scheduled') marks[dStr].hasScheduled = true;
+        else marks[dStr].hasCompleted = true;
+      });
+      
+      const formattedMarks: any = {};
+      Object.keys(marks).forEach(d => {
+        formattedMarks[d] = { 
+          marked: true, 
+          dotColor: marks[d].hasScheduled ? theme.BRAND : theme.GREEN 
+        };
+      });
+      setCalendarMarks(formattedMarks);
+    } catch (e) { console.error(e); } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
   };
 
   useFocusEffect(useCallback(() => { fetchPosts(selectedDate); }, [selectedDate]));
+
+  const onRefresh = () => {
+    setIsRefreshing(true);
+    fetchPosts(selectedDate);
+  };
 
   const handlePostNow = async (post: any) => {
     try {
@@ -228,22 +266,91 @@ export default function DashboardScreen() {
     ? { hour: '2-digit', minute: '2-digit', hour12: false }
     : { hour: 'numeric', minute: '2-digit', hour12: true };
 
+  const handleLongPress = (id: number) => {
+    if (!isSelectionMode) {
+      setIsSelectionMode(true);
+      setSelectedIds(new Set([id]));
+    }
+  };
+
+  const handlePressCard = (id: number) => {
+    if (isSelectionMode) {
+      const next = new Set(selectedIds);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      setSelectedIds(next);
+      if (next.size === 0) setIsSelectionMode(false);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === posts.length) {
+      setSelectedIds(new Set());
+      setIsSelectionMode(false);
+    } else {
+      setSelectedIds(new Set(posts.map((p: any) => p.id)));
+    }
+  };
+
+  const handleBatchDelete = () => {
+    if (selectedIds.size === 0) return;
+    Alert.alert(
+      'Delete Tasks',
+      `Delete ${selectedIds.size} task(s)? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive',
+          onPress: async () => {
+            try {
+              const db = await getDB();
+              const ids = Array.from(selectedIds).join(',');
+              await db.runAsync(`DELETE FROM posts WHERE id IN (${ids})`);
+              setIsSelectionMode(false);
+              setSelectedIds(new Set());
+              fetchPosts(selectedDate);
+            } catch (e) { console.error(e); }
+          }
+        }
+      ]
+    );
+  };
+
   const renderItem = ({ item, index }: any) => {
     const isPosted = item.status === 'Posted';
+    const isAnalyzed = item.status === 'Analyzed';
+    const isCompleted = isPosted || isAnalyzed;
+
     return (
       <Animated.View
         entering={FadeInDown.delay(index * 100).springify().damping(18)}
         layout={Layout.springify().damping(14)}
-        style={styles.card}
+        style={{ marginBottom: 14 }}
       >
-        <View style={[styles.cardAccent, { backgroundColor: isPosted ? theme.GREEN : theme.BRAND }]} />
-        <View style={styles.cardInner}>
-          {/* Top row: status + time + action icons */}
+        <View style={[styles.card, { marginBottom: 0, opacity: isAnalyzed ? 0.65 : 1 }]}>
+          <TouchableOpacity
+            activeOpacity={isSelectionMode ? 0.8 : 1}
+            onLongPress={() => handleLongPress(item.id)}
+            onPress={() => handlePressCard(item.id)}
+            style={{ flex: 1, flexDirection: 'row' }}
+          >
+          {isSelectionMode && (
+            <View style={{ justifyContent: 'center', paddingLeft: 16 }}>
+              {selectedIds.has(item.id) ? (
+                <CheckSquare color={theme.BRAND} size={20} />
+              ) : (
+                <Square color={theme.TEXT_MUTED} size={20} />
+              )}
+            </View>
+          )}
+          <View style={[styles.cardAccent, { backgroundColor: isCompleted ? theme.GREEN : theme.BRAND, marginLeft: isSelectionMode ? 10 : 14 }]} />
+          <View style={styles.cardInner}>
+            {/* Top row: status + time + action icons */}
           <View style={styles.cardTopRow}>
             <View style={styles.cardTopLeft}>
-              <View style={[styles.statusDot, { backgroundColor: isPosted ? theme.GREEN : theme.BRAND }]} />
-              <Text style={[styles.statusLabel, { color: isPosted ? theme.GREEN : theme.BRAND }]}>
-                {isPosted ? 'Completed' : 'Scheduled'}
+              <View style={[styles.statusDot, { backgroundColor: isCompleted ? theme.GREEN : theme.BRAND }]} />
+              <Text style={[styles.statusLabel, { color: isCompleted ? theme.GREEN : theme.BRAND }]}>
+                {isAnalyzed ? 'Analyzed' : (isPosted ? 'Completed' : 'Scheduled')}
               </Text>
             </View>
             <View style={styles.cardTopRight}>
@@ -281,12 +388,13 @@ export default function DashboardScreen() {
           ) : null}
 
           <View style={styles.cardActions}>
-            {!isPosted ? (
+            {item.status === 'Scheduled' && (
               <TouchableOpacity onPress={() => handlePostNow(item)} activeOpacity={0.8} style={styles.postBtn}>
                 <Play color="#fff" size={14} fill="#fff" />
                 <Text style={styles.postBtnText}>Post Now</Text>
               </TouchableOpacity>
-            ) : (
+            )}
+            {item.status === 'Posted' && (
               <View style={styles.viewsRow}>
                 <View style={styles.viewsInputWrap}>
                   <BarChart2 color={theme.TEXT_MUTED} size={14} />
@@ -305,18 +413,34 @@ export default function DashboardScreen() {
                 </TouchableOpacity>
               </View>
             )}
+            {item.status === 'Analyzed' && (
+              <View style={[styles.viewsRow, { paddingVertical: 8, gap: 6 }]}>
+                 <BarChart2 color={theme.GREEN} size={15} />
+                 <Text style={{ fontFamily: 'Inter_700Bold', color: theme.GREEN, fontSize: 13 }}>
+                   {item.viewCount} Views Tracked
+                 </Text>
+              </View>
+            )}
           </View>
+        </View>
+        </TouchableOpacity>
         </View>
       </Animated.View>
     );
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView 
+      style={styles.container} 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'padding'} 
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 80}
+    >
       <ScrollView
         showsVerticalScrollIndicator={false}
         stickyHeaderIndices={[0]}
         contentContainerStyle={{ paddingBottom: 150 }}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={theme.BRAND} />}
+        keyboardShouldPersistTaps="handled"
       >
         {/* Sticky Calendar */}
         <View style={styles.calendarSection}>
@@ -338,7 +462,13 @@ export default function DashboardScreen() {
                 textDayFontSize: 14, textMonthFontSize: 16, textDayHeaderFontSize: 12,
               }}
               markedDates={{ 
-                [selectedDate]: { selected: true, selectedColor: theme.BRAND, disableTouchEvent: true } 
+                ...calendarMarks,
+                [selectedDate]: { 
+                  ...(calendarMarks[selectedDate] || {}),
+                  selected: true, 
+                  selectedColor: theme.BRAND, 
+                  disableTouchEvent: true 
+                } 
               }}
             />
           </Animated.View>
@@ -350,13 +480,42 @@ export default function DashboardScreen() {
         {/* Task List */}
         <View style={styles.listSection}>
           <View style={styles.listHeader}>
-            <Text style={styles.listTitle}>Task List</Text>
-            <View style={styles.countBadge}>
-              <Text style={styles.countBadgeText}>{posts.length}</Text>
-            </View>
+            {isSelectionMode ? (
+              <>
+                <TouchableOpacity onPress={toggleSelectAll} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  {selectedIds.size === posts.length && posts.length > 0 ? (
+                    <CheckSquare color={theme.BRAND} size={20} />
+                  ) : (
+                    <Square color={theme.TEXT_MUTED} size={20} />
+                  )}
+                  <Text style={styles.listTitle}>Select All</Text>
+                </TouchableOpacity>
+                <View style={{ flex: 1 }} />
+                <TouchableOpacity onPress={() => setIsSelectionMode(false)} style={styles.cancelBtn}>
+                  <Text style={styles.cancelBtnText}>Cancel</Text>
+                </TouchableOpacity>
+                {selectedIds.size > 0 && (
+                  <TouchableOpacity onPress={handleBatchDelete} style={styles.batchDeleteBtn}>
+                    <Trash2 color="#fff" size={14} />
+                    <Text style={styles.batchDeleteBtnText}>Delete</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            ) : (
+              <>
+                <Text style={styles.listTitle}>Task List</Text>
+                <View style={styles.countBadge}>
+                  <Text style={styles.countBadgeText}>{posts.length}</Text>
+                </View>
+              </>
+            )}
           </View>
 
-          {posts.length === 0 ? (
+          {isLoading ? (
+            <View style={{ paddingVertical: 40, alignItems: 'center' }}>
+              <ActivityIndicator size="large" color={theme.BRAND} />
+            </View>
+          ) : posts.length === 0 ? (
             <Animated.View entering={FadeInUp.delay(100)} style={styles.emptyContainer}>
               <CalendarDays color={theme.BORDER} size={56} />
               <Text style={styles.emptyTitle}>All clear!</Text>
@@ -374,7 +533,10 @@ export default function DashboardScreen() {
 
       {/* Edit Task Modal */}
       <Modal visible={!!editingPost} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView 
+          style={styles.modalOverlay}
+          behavior="padding"
+        >
           <View style={styles.modalContent}>
             <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
@@ -384,7 +546,11 @@ export default function DashboardScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView 
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingBottom: 150 }}
+            >
               {/* Task Name */}
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Task Name</Text>
@@ -461,9 +627,9 @@ export default function DashboardScreen() {
               <View style={{ height: 20 }} />
             </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -484,6 +650,10 @@ const createStyles = (theme: ThemeColors, isDark: boolean) => StyleSheet.create(
   listTitle: { fontFamily: 'Inter_700Bold', fontSize: 20, color: theme.TEXT_DARK },
   countBadge: { backgroundColor: theme.BRAND + '22', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 3 },
   countBadgeText: { fontFamily: 'Inter_700Bold', fontSize: 13, color: theme.BRAND },
+  cancelBtn: { paddingHorizontal: 12, paddingVertical: 6 },
+  cancelBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: theme.TEXT_MUTED },
+  batchDeleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.RED, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  batchDeleteBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: '#fff' },
   // Card
   card: {
     flexDirection: 'row', backgroundColor: theme.CARD_BG, borderRadius: 24, marginBottom: 14,

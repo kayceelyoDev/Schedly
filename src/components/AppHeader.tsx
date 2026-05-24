@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { Settings } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,7 +8,7 @@ import { useSettings } from '../context/SettingsContext';
 const PAGE_LABELS: Record<string, string> = {
   '/':          'Monitor',
   '/add':       'Create Task',
-  '/vault':     'Hashtag Vault',
+  '/vault':     'Caption Vault',
   '/analytics': 'Performance',
   '/settings':  'Settings',
 };
@@ -35,11 +35,13 @@ export default function AppHeader() {
     >
       <View style={styles.topRow}>
 
-        {/* Two-tone logo — matches splash screen font exactly */}
+        {/* Image logo + Native text for better legibility */}
         <View style={styles.logoRow}>
-          {/* Main word: always dark/black */}
+          <Image 
+            source={require('../../assets/images/logo-only-with-out-bg.png')} 
+            style={{ width: 34, height: 34, resizeMode: 'contain', marginRight: 8, tintColor: isDark ? '#FFFFFF' : theme.TEXT_DARK }}
+          />
           <Text style={[styles.logo, { color: theme.TEXT_DARK }]}>SCHED</Text>
-          {/* Accent suffix: theme/brand color */}
           <Text style={[styles.logo, { color: theme.BRAND }]}>LY</Text>
         </View>
 
@@ -80,7 +82,7 @@ const styles = StyleSheet.create({
   },
   logoRow: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
   },
   // Same font family, weight & letter-spacing as the splash screen text
   logo: {

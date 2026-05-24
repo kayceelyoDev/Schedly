@@ -1,4 +1,4 @@
-import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
+import { View, Text, TextInput, StyleSheet, TouchableOpacity, ScrollView, Platform, KeyboardAvoidingView } from 'react-native';
 import { useState, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { useRouter } from 'expo-router';
@@ -100,90 +100,101 @@ export default function AddPostScreen() {
       : { hour: 'numeric', minute: '2-digit', hour12: true };
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      <Animated.View entering={FadeInDown.delay(100)} style={styles.formGroup}>
-        <View style={styles.labelContainer}>
-          <Type color={theme.BRAND} size={18} />
-          <Text style={styles.label}>Task Name</Text>
-        </View>
-        <TextInput
-          style={styles.input}
-          value={title}
-          onChangeText={setTitle}
-          placeholder="What needs to be done?"
-          placeholderTextColor={theme.TEXT_MUTED}
-        />
-      </Animated.View>
-
-      <Animated.View entering={FadeInDown.delay(200)} style={styles.formGroup}>
-        <View style={styles.labelContainer}>
-          <CalendarClock color={theme.BRAND} size={18} />
-          <Text style={styles.label}>Scheduled Date & Time</Text>
-        </View>
-        <View style={styles.dateTimeContainer}>
-          <TouchableOpacity style={styles.dateBtn} onPress={() => setShowDatePicker(true)} activeOpacity={0.7}>
-            <CalendarDays size={16} color={theme.TEXT_MUTED} />
-            <Text style={styles.dateText}>{date.toLocaleDateString()}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.dateBtn} onPress={() => setShowTimePicker(true)} activeOpacity={0.7}>
-            <Clock size={16} color={theme.TEXT_MUTED} />
-            <Text style={styles.dateText}>{date.toLocaleTimeString([], timeOptions)}</Text>
-          </TouchableOpacity>
-        </View>
-        {showDatePicker && (
-          <DateTimePicker
-            value={date}
-            mode="date"
-            display="default"
-            onChange={onChangeDate}
+    <KeyboardAvoidingView 
+      style={{ flex: 1 }} 
+      behavior="padding"
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 80}
+    >
+      <ScrollView 
+        style={styles.container} 
+        contentContainerStyle={{ paddingBottom: 150 }}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Animated.View entering={FadeInDown.delay(100)} style={styles.formGroup}>
+          <View style={styles.labelContainer}>
+            <Type color={theme.BRAND} size={18} />
+            <Text style={styles.label}>Task Name</Text>
+          </View>
+          <TextInput
+            style={styles.input}
+            value={title}
+            onChangeText={setTitle}
+            placeholder="What needs to be done?"
+            placeholderTextColor={theme.TEXT_MUTED}
           />
-        )}
-        {showTimePicker && (
-          <DateTimePicker
-            value={date}
-            mode="time"
-            display="default"
-            onChange={onChangeTime}
+        </Animated.View>
+
+        <Animated.View entering={FadeInDown.delay(200)} style={styles.formGroup}>
+          <View style={styles.labelContainer}>
+            <CalendarClock color={theme.BRAND} size={18} />
+            <Text style={styles.label}>Scheduled Date & Time</Text>
+          </View>
+          <View style={styles.dateTimeContainer}>
+            <TouchableOpacity style={styles.dateBtn} onPress={() => setShowDatePicker(true)} activeOpacity={0.7}>
+              <CalendarDays size={16} color={theme.TEXT_MUTED} />
+              <Text style={styles.dateText}>{date.toLocaleDateString()}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.dateBtn} onPress={() => setShowTimePicker(true)} activeOpacity={0.7}>
+              <Clock size={16} color={theme.TEXT_MUTED} />
+              <Text style={styles.dateText}>{date.toLocaleTimeString([], timeOptions)}</Text>
+            </TouchableOpacity>
+          </View>
+          {showDatePicker && (
+            <DateTimePicker
+              value={date}
+              mode="date"
+              display="default"
+              onChange={onChangeDate}
+            />
+          )}
+          {showTimePicker && (
+            <DateTimePicker
+              value={date}
+              mode="time"
+              display="default"
+              onChange={onChangeTime}
+            />
+          )}
+        </Animated.View>
+
+        <Animated.View entering={FadeInDown.delay(300)} style={styles.formGroup}>
+          <View style={styles.labelContainer}>
+            <ShoppingBag color={theme.BRAND} size={18} />
+            <Text style={styles.label}>Product Name</Text>
+          </View>
+          <TextInput
+            style={styles.input}
+            value={productName}
+            onChangeText={setProductName}
+            onBlur={handleProductBlur}
+            placeholder="e.g. Wireless Mouse"
+            placeholderTextColor={theme.TEXT_MUTED}
           />
-        )}
-      </Animated.View>
+        </Animated.View>
 
-      <Animated.View entering={FadeInDown.delay(300)} style={styles.formGroup}>
-        <View style={styles.labelContainer}>
-          <ShoppingBag color={theme.BRAND} size={18} />
-          <Text style={styles.label}>Product Name</Text>
-        </View>
-        <TextInput
-          style={styles.input}
-          value={productName}
-          onChangeText={setProductName}
-          onBlur={handleProductBlur}
-          placeholder="e.g. Wireless Mouse"
-          placeholderTextColor={theme.TEXT_MUTED}
-        />
-      </Animated.View>
+        <Animated.View entering={FadeInDown.delay(400)} style={styles.formGroup}>
+          <View style={styles.labelContainer}>
+            <Hash color={theme.BRAND} size={18} />
+            <Text style={styles.label}>Caption</Text>
+          </View>
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            value={caption}
+            onChangeText={setCaption}
+            multiline
+            placeholder="Enter caption..."
+            placeholderTextColor={theme.TEXT_MUTED}
+          />
+        </Animated.View>
 
-      <Animated.View entering={FadeInDown.delay(400)} style={styles.formGroup}>
-        <View style={styles.labelContainer}>
-          <Hash color={theme.BRAND} size={18} />
-          <Text style={styles.label}>Caption</Text>
-        </View>
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          value={caption}
-          onChangeText={setCaption}
-          multiline
-          placeholder="Enter caption..."
-          placeholderTextColor={theme.TEXT_MUTED}
-        />
-      </Animated.View>
-
-      <Animated.View entering={FadeInDown.delay(500)}>
-        <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.8}>
-           <Text style={styles.saveBtnText}>Save Task</Text>
-        </TouchableOpacity>
-      </Animated.View>
-    </ScrollView>
+        <Animated.View entering={FadeInDown.delay(500)}>
+          <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.8}>
+             <Text style={styles.saveBtnText}>Save Task</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

@@ -1,13 +1,41 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
 import { useSettings, ThemeColors } from '../../context/SettingsContext';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import { Moon, Sun, Monitor, DollarSign, Bell, Clock, Palette } from 'lucide-react-native';
+import { Moon, Sun, Monitor, DollarSign, Bell, Clock, Palette, Trash2, AlertTriangle } from 'lucide-react-native';
+import { getDB } from '../../db/database';
+import { Alert } from 'react-native';
 
 export default function SettingsScreen() {
   const { theme, themeMode, accentColor, currency, timeFormat, notificationsEnabled, updateSetting } = useSettings();
   const styles = createStyles(theme);
 
   const colors = ['#6B4EFF', '#3B82F6', '#10B981', '#EF4444', '#F59E0B', '#EC4899'];
+
+  const handleClearData = () => {
+    Alert.alert(
+      'Clear All App Data',
+      'Are you absolutely sure? This will delete all tasks, hashtag vault entries, and earnings history. This action cannot be undone!',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete All Data', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const db = await getDB();
+              await db.runAsync('DELETE FROM posts');
+              await db.runAsync('DELETE FROM vault');
+              await db.runAsync('DELETE FROM withdrawals');
+              Alert.alert('Success', 'All app data has been cleared.');
+            } catch (e) {
+              console.error(e);
+              Alert.alert('Error', 'Failed to clear app data.');
+            }
+          }
+        }
+      ]
+    );
+  };
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
@@ -132,6 +160,22 @@ export default function SettingsScreen() {
               thumbColor={'#fff'}
             />
           </View>
+        </View>
+      </Animated.View>
+
+      {/* Data Management */}
+      <Animated.View entering={FadeInDown.delay(400).duration(400)} style={styles.section}>
+        <Text style={styles.sectionTitle}>Data Management</Text>
+        <View style={styles.card}>
+          <TouchableOpacity style={styles.row} onPress={handleClearData} activeOpacity={0.7}>
+            <View style={[styles.iconContainer, { backgroundColor: theme.RED + '1A' }]}>
+              <Trash2 color={theme.RED} size={20} />
+            </View>
+            <View style={{flex: 1}}>
+              <Text style={[styles.rowText, { color: theme.RED }]}>Clear All App Data</Text>
+              <Text style={styles.rowSubtext}>Delete all tasks, vault items, and history</Text>
+            </View>
+          </TouchableOpacity>
         </View>
       </Animated.View>
       

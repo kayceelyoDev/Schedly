@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { initDB } from '../db/database';
-import { View, StyleSheet, Text } from 'react-native';
-import Animated, { FadeOut, BounceInUp, runOnJS } from 'react-native-reanimated';
+import { View, StyleSheet, Text, Image } from 'react-native';
+import Animated, { FadeOut, BounceInUp, runOnJS, useSharedValue, useAnimatedStyle, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import { useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 
 import * as SplashScreen from 'expo-splash-screen';
@@ -38,8 +38,29 @@ function RootContent() {
     Inter_700Bold,
   });
 
+  const scale = useSharedValue(1);
+
+  useEffect(() => {
+    if (fontsLoaded && ready) {
+      scale.value = withRepeat(
+        withSequence(
+          withTiming(1.1, { duration: 600 }),
+          withTiming(1, { duration: 600 })
+        ),
+        -1,
+        true
+      );
+    }
+  }, [fontsLoaded, ready]);
+
+  const animatedLogoStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
   const handleSplashAnimationComplete = () => {
-    setAnimationComplete(true);
+    setTimeout(() => {
+      setAnimationComplete(true);
+    }, 1200);
   };
 
   if (!fontsLoaded || !ready) {
@@ -52,12 +73,16 @@ function RootContent() {
         <Animated.View
           style={styles.splashLogoRow}
           entering={BounceInUp.duration(1200).withCallback((finished) => {
-            if (finished) runOnJS(handleSplashAnimationComplete)();
+            if (finished) {
+               runOnJS(handleSplashAnimationComplete)();
+            }
           })}
           exiting={FadeOut.duration(400)}
         >
-          <Text style={[styles.splashText, { color: theme.TEXT_DARK }]}>SCHED</Text>
-          <Text style={[styles.splashText, { color: theme.BRAND }]}>LY</Text>
+          <Animated.Image 
+             source={require('../../assets/images/logo-only-with-out-bg.png')}
+             style={[{ width: 130, height: 130, resizeMode: 'contain', marginBottom: 12 }, animatedLogoStyle]}
+          />
         </Animated.View>
         <Animated.Text
           style={[styles.splashTagline, { color: theme.TEXT_MUTED }]}

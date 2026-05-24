@@ -1,10 +1,10 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert, Dimensions, KeyboardAvoidingView, Platform, ActivityIndicator, RefreshControl } from 'react-native';
 import { useState, useCallback } from 'react';
 import { getDB } from '../../db/database';
 import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
 import { useFocusEffect } from 'expo-router';
 import { LineChart } from 'react-native-gifted-charts';
-import { Flame, Activity, Clock, DollarSign, PlusCircle, X, Trash2, CalendarDays, TrendingUp, BarChart2, ShoppingBag } from 'lucide-react-native';
+import { Flame, Activity, Clock, DollarSign, PlusCircle, X, Trash2, CalendarDays, TrendingUp, BarChart2, ShoppingBag, CheckSquare, Square } from 'lucide-react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useSettings, ThemeColors } from '../../context/SettingsContext';
 
@@ -12,6 +12,8 @@ const { width } = Dimensions.get('window');
 
 export default function AnalyticsScreen() {
   const [activeTab, setActiveTab] = useState<'tasks' | 'earnings'>('tasks');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Tasks States
   const [bestHour, setBestHour] = useState<number | null>(null);
@@ -26,6 +28,10 @@ export default function AnalyticsScreen() {
   const [totalRevenue, setTotalRevenue] = useState<number>(0);
   const [averages, setAverages] = useState<any>({});
   const [withdrawalChartData, setWithdrawalChartData] = useState<any[]>([]);
+
+  // Selection state
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   // Modal
   const [showModal, setShowModal] = useState(false);
@@ -202,7 +208,15 @@ export default function AnalyticsScreen() {
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
     }
+  };
+
+  const onRefresh = () => {
+    setIsRefreshing(true);
+    fetchAnalytics();
   };
 
   useFocusEffect(useCallback(() => { fetchAnalytics(); }, [viewsTimeframe, earningsTimeframe]));
@@ -256,11 +270,62 @@ export default function AnalyticsScreen() {
     );
   };
 
+  const handleLongPress = (id: number) => {
+    if (!isSelectionMode) {
+      setIsSelectionMode(true);
+      setSelectedIds(new Set([id]));
+    }
+  };
+
+  const handlePressCard = (id: number) => {
+    if (isSelectionMode) {
+      const next = new Set(selectedIds);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      setSelectedIds(next);
+      if (next.size === 0) setIsSelectionMode(false);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === withdrawals.length) {
+      setSelectedIds(new Set());
+      setIsSelectionMode(false);
+    } else {
+      setSelectedIds(new Set(withdrawals.map((w: any) => w.id)));
+    }
+  };
+
+  const handleBatchDelete = () => {
+    if (selectedIds.size === 0) return;
+    Alert.alert(
+      'Delete Withdrawals',
+      `Delete ${selectedIds.size} record(s)? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive',
+          onPress: async () => {
+            try {
+              const db = await getDB();
+              const ids = Array.from(selectedIds).join(',');
+              await db.runAsync(`DELETE FROM withdrawals WHERE id IN (${ids})`);
+              setIsSelectionMode(false);
+              setSelectedIds(new Set());
+              fetchAnalytics();
+            } catch (e) { console.error(e); }
+          }
+        }
+      ]
+    );
+  };
+
   return (
     <ScrollView
       style={styles.container}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={{ paddingBottom: 150 }}
+      refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={theme.BRAND} />}
     >
       {/* Segmented Control */}
       <View style={styles.tabSwitcher}>
@@ -287,7 +352,11 @@ export default function AnalyticsScreen() {
         </TouchableOpacity>
       </View>
 
-      {activeTab === 'tasks' ? (
+      {isLoading ? (
+        <View style={{ paddingVertical: 60, alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={theme.BRAND} />
+        </View>
+      ) : activeTab === 'tasks' ? (
         <Animated.View entering={FadeIn.duration(400)} key="tasks">
           
           {/* Views Chart */}
@@ -492,10 +561,34 @@ export default function AnalyticsScreen() {
 
           {/* Withdrawal History List */}
           <Animated.View entering={FadeInDown.delay(150).duration(600)} style={styles.card}>
-            <View style={styles.headerRow}>
-              <CalendarDays color={theme.BRAND} size={22} />
-              <Text style={styles.title}>Withdrawal History</Text>
-            </View>
+            {isSelectionMode ? (
+              <View style={[styles.headerRow, { justifyContent: 'space-between' }]}>
+                <TouchableOpacity onPress={toggleSelectAll} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  {selectedIds.size === withdrawals.length && withdrawals.length > 0 ? (
+                    <CheckSquare color={theme.BRAND} size={20} />
+                  ) : (
+                    <Square color={theme.TEXT_MUTED} size={20} />
+                  )}
+                  <Text style={styles.title}>Select All</Text>
+                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <TouchableOpacity onPress={() => setIsSelectionMode(false)} style={styles.cancelBtn}>
+                    <Text style={styles.cancelBtnText}>Cancel</Text>
+                  </TouchableOpacity>
+                  {selectedIds.size > 0 && (
+                    <TouchableOpacity onPress={handleBatchDelete} style={styles.batchDeleteBtn}>
+                      <Trash2 color="#fff" size={14} />
+                      <Text style={styles.batchDeleteBtnText}>Delete</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            ) : (
+              <View style={styles.headerRow}>
+                <CalendarDays color={theme.BRAND} size={22} />
+                <Text style={styles.title}>Withdrawal History</Text>
+              </View>
+            )}
 
             {withdrawals.length === 0 ? (
               <View style={styles.emptyContainer}>
@@ -506,7 +599,24 @@ export default function AnalyticsScreen() {
               withdrawals.map((w: any, index: number) => {
                 const { date, time } = formatDate(w.date);
                 return (
-                  <View key={w.id} style={[styles.withdrawalRow, index < withdrawals.length - 1 && styles.borderBottom]}>
+                  <TouchableOpacity 
+                    key={w.id} 
+                    style={[styles.withdrawalRow, index < withdrawals.length - 1 && styles.borderBottom]}
+                    activeOpacity={isSelectionMode ? 0.8 : 1}
+                    onLongPress={() => handleLongPress(w.id)}
+                    onPress={() => {
+                       if (isSelectionMode) handlePressCard(w.id);
+                    }}
+                  >
+                    {isSelectionMode && (
+                      <View style={{ justifyContent: 'center', paddingRight: 12 }}>
+                        {selectedIds.has(w.id) ? (
+                          <CheckSquare color={theme.BRAND} size={20} />
+                        ) : (
+                          <Square color={theme.TEXT_MUTED} size={20} />
+                        )}
+                      </View>
+                    )}
                     <View style={styles.withdrawalLeft}>
                       <View style={[styles.productIconWrap, { backgroundColor: theme.BRAND + '1A' }]}>
                         <DollarSign size={16} color={theme.BRAND} />
@@ -516,10 +626,12 @@ export default function AnalyticsScreen() {
                         <Text style={styles.withdrawalDate}>{date} · {time}</Text>
                       </View>
                     </View>
-                    <TouchableOpacity onPress={() => handleDeleteWithdrawal(w.id)} style={styles.deleteBtn} activeOpacity={0.7}>
-                      <Trash2 size={16} color={theme.RED} />
-                    </TouchableOpacity>
-                  </View>
+                    {!isSelectionMode && (
+                      <TouchableOpacity onPress={() => handleDeleteWithdrawal(w.id)} style={styles.deleteBtn} activeOpacity={0.7}>
+                        <Trash2 size={16} color={theme.RED} />
+                      </TouchableOpacity>
+                    )}
+                  </TouchableOpacity>
                 );
               })
             )}
@@ -529,7 +641,10 @@ export default function AnalyticsScreen() {
 
       {/* Add Withdrawal Modal */}
       <Modal visible={showModal} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView 
+          style={styles.modalOverlay}
+          behavior="padding"
+        >
           <View style={styles.modalContent}>
             <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
@@ -539,38 +654,40 @@ export default function AnalyticsScreen() {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Amount ({currSymbol})</Text>
-              <TextInput
-                style={styles.input}
-                value={wAmount}
-                onChangeText={setWAmount}
-                keyboardType="numeric"
-                placeholder="e.g. 500"
-                placeholderTextColor={theme.TEXT_MUTED}
-              />
-            </View>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 50 }}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Amount ({currSymbol})</Text>
+                <TextInput
+                  style={styles.input}
+                  value={wAmount}
+                  onChangeText={setWAmount}
+                  keyboardType="numeric"
+                  placeholder="e.g. 500"
+                  placeholderTextColor={theme.TEXT_MUTED}
+                />
+              </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Date</Text>
-              <TouchableOpacity style={styles.dateInput} onPress={() => setShowDatePicker(true)}>
-                <CalendarDays size={16} color={theme.TEXT_MUTED} />
-                <Text style={styles.dateText}>{wDate.toLocaleDateString()}</Text>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Date</Text>
+                <TouchableOpacity style={styles.dateInput} onPress={() => setShowDatePicker(true)}>
+                  <CalendarDays size={16} color={theme.TEXT_MUTED} />
+                  <Text style={styles.dateText}>{wDate.toLocaleDateString()}</Text>
+                </TouchableOpacity>
+              </View>
+
+              {showDatePicker && (
+                <DateTimePicker
+                  value={wDate} mode="date" display="default"
+                  onChange={(e, d) => { setShowDatePicker(false); if (d) setWDate(d); }}
+                />
+              )}
+
+              <TouchableOpacity style={styles.saveBtn} onPress={handleSaveWithdrawal} activeOpacity={0.8}>
+                <Text style={styles.saveBtnText}>Save Withdrawal</Text>
               </TouchableOpacity>
-            </View>
-
-            {showDatePicker && (
-              <DateTimePicker
-                value={wDate} mode="date" display="default"
-                onChange={(e, d) => { setShowDatePicker(false); if (d) setWDate(d); }}
-              />
-            )}
-
-            <TouchableOpacity style={styles.saveBtn} onPress={handleSaveWithdrawal} activeOpacity={0.8}>
-              <Text style={styles.saveBtnText}>Save Withdrawal</Text>
-            </TouchableOpacity>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </ScrollView>
   );
@@ -632,6 +749,10 @@ const createStyles = (theme: ThemeColors, isDark: boolean) => StyleSheet.create(
   withdrawalAmount: { fontFamily: 'Inter_700Bold', fontSize: 16, color: theme.TEXT_DARK },
   withdrawalDate: { fontFamily: 'Inter_500Medium', fontSize: 12, color: theme.TEXT_MUTED, marginTop: 2 },
   deleteBtn: { padding: 8 },
+  cancelBtn: { paddingHorizontal: 12, paddingVertical: 6 },
+  cancelBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 14, color: theme.TEXT_MUTED },
+  batchDeleteBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: theme.RED, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12 },
+  batchDeleteBtnText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: '#fff' },
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
   modalContent: {
